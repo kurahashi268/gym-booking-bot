@@ -1,0 +1,18 @@
+{
+  "login": {
+    "id": "hiromi011510",
+    "password": "hiromi0115"
+  },
+  "reservation": {
+    "time": "2025-10-22 11:45:00",
+    "flying_time": 0.65,
+    "confirm_reservation": true
+  },
+  "store": {
+    "selected_store_index": 14
+  },
+  "lesson": {
+    "date_selector": "#listcontainer3 > td:nth-child(15) > a > p.lesson_name",
+    "location_selector": "#main > div.overflow-wrap > div > fieldset > fieldset > div > table > tbody > tr:nth-child(3) > td:nth-child(6) > div > label"
+  }
+}
