@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { isMainThread } from 'worker_threads';
 
-import type { ConfigData } from './types';
+import type { ConfigData, Task } from './types';
 import { log, setProfile as setLogProfile, setProductionMode as setLogProductionMode, writeLogBufferToFile } from './log';
 import { getTokyoTime, getRegularDatetimeString, formatDateTime, parseDateTime, sleep, rgbToRgba } from './helpers';
 
@@ -24,7 +24,7 @@ async function test(isProduction: boolean, profileName?: string, configPath?: st
   const actualConfigPath = configPath || path.join(baseDir, 'test-config.json');
   const actualProfile = profileName || 'test';
   const configData = parseConfig(actualConfigPath);
-  return await run(configData, isProduction, actualProfile);
+  return await run({configData, isProduction, profile: actualProfile});
 }
 
 // 待機処理
@@ -43,8 +43,8 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
   const flying_time = configData.reservation.flying_time;
   const confirm_reservation = configData.reservation.confirm_reservation;
   const selected_store_index = configData.store.selected_store_index;
-  const lesson_date = configData.lesson.date_selector;
-  const lesson_no = configData.lesson.location_selector;
+  const lesson_date = configData.lesson.date_selector.selector;
+  const lesson_no = configData.lesson.location_selector.selector;
 
   // 文字列をDateオブジェクトに変換
   const reservation_time1 = parseDateTime(reservation_time);
@@ -342,7 +342,9 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
 }
 
 // メイン処理
-export default async function run(configData: ConfigData, isProduction: boolean = false, profile: string = "test"): Promise<number> {
+export default async function run(task: Task): Promise<number> {
+  const {configData, isProduction, profile} = task;
+  
   // プロダクションモードを設定
   setLogProductionMode(isProduction);
 
@@ -376,7 +378,7 @@ export default async function run(configData: ConfigData, isProduction: boolean 
     success = true;
   } catch (error: any) {
     log(`エラーが発生しました: ${error.toString()}`);
-    errorMessage = error.toString();
+    errorMessage = error.toString().split('\n')[0];
     if (error instanceof Error) {
       log(`エラースタック: ${error.stack}`);
     }

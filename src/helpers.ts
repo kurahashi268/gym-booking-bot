@@ -29,16 +29,16 @@ export function formatDateTime(date: Date): string {
 }
 
 export function parseDateTime(dateStr: string): Date {
-    // "2025-10-22 11:45:00" 形式をパース
+    // "2025-10-22 11:45" 形式をパース
     // 東京タイムゾーン（UTC+9）として扱う
     // システムが東京時間で動いていることを前提とする
     const [datePart, timePart] = dateStr.split(' ');
     const [year, month, day] = datePart.split('-').map(Number);
-    const [hours, minutes, seconds] = timePart.split(':').map(Number);
+    const [hours, minutes] = timePart.split(':').map(Number);
 
     // ローカル時間として解釈（システムが東京時間なら正しく動作）
     // Pythonのtime.mktime()と同様に、ローカル時間として扱う
-    const date = new Date(year, month - 1, day, hours, minutes, seconds);
+    const date = new Date(year, month - 1, day, hours, minutes);
 
     return date;
 }

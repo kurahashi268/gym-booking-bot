@@ -26,10 +26,24 @@ export type ConfigData = {
     };
     lesson: {
         // ⑤レッスン日時を選択
-        date_selector: string;
+        date_selector: {
+            row: number;
+            col: number;
+            selector: string;
+        };
         // ⑥レッスン場所を選択
         //【listcontainerの後の数字が何行目（何時限目）か、td:nth-child()が何日目（日付）か】
         //【2週間前からの予約なので、td:nth-child(15)で固定】
-        location_selector: string;
+        location_selector: {
+            row: number;
+            col: number;
+            selector: string;
+        };
     };
+};
+
+export type Task = {
+    configData: ConfigData;
+    isProduction: boolean;
+    profile: string;
 };
