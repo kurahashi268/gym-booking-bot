@@ -4,32 +4,27 @@ import * as path from 'path';
 import { isMainThread } from 'worker_threads';
 
 import type { ConfigData } from './types';
-import { log, setProductionMode, writeLogBufferToFile } from './log';
-import { getTokyoTime, formatDateTime, parseDateTime, sleep, rgbToRgba } from './helpers';
+import { log, setProfile as setLogProfile, setProductionMode as setLogProductionMode, writeLogBufferToFile } from './log';
+import { getTokyoTime, getRegularDatetimeString, formatDateTime, parseDateTime, sleep, rgbToRgba } from './helpers';
+
+const baseDir = process.cwd();
 
 // 設定ファイルを読み込む
-function parseConfig() {
-  // Try config.json first, fallback to example-config.json
-  const configPath = path.join(__dirname, '../config.json');
-  const exampleConfigPath = path.join(__dirname, '../example-config.json');
-  
-  let configFilePath: string;
+function parseConfig(configPath: string): ConfigData {
   if (fs.existsSync(configPath)) {
-    configFilePath = configPath;
-  } else if (fs.existsSync(exampleConfigPath)) {
-    configFilePath = exampleConfigPath;
+    const configData: ConfigData = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    return configData;
   } else {
-    throw new Error(`設定ファイルが見つかりません: ${configPath} または ${exampleConfigPath}`);
+    throw new Error(`設定ファイルが見つかりません: ${configPath} または ${configPath}`);
   }
-  
-  const configData: ConfigData = JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
-  return configData;
 }
 
 // テスト用
-async function test(isProduction: boolean): Promise<number> {
-  const configData = parseConfig();
-  return await run(configData, isProduction);
+async function test(isProduction: boolean, profileName?: string, configPath?: string): Promise<number> {
+  const actualConfigPath = configPath || path.join(baseDir, 'test-config.json');
+  const actualProfile = profileName || 'test';
+  const configData = parseConfig(actualConfigPath);
+  return await run(configData, isProduction, actualProfile);
 }
 
 // 待機処理
@@ -185,7 +180,7 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
   // 予約開始時刻を記録
   const start_dt = getTokyoTime();
   const application_time = start_dt;
-  log(`${formatDateTime(start_dt)}  予約処理開始`);
+  log(`予約処理開始`);
 
   // 次へボタン押下(「次へ」の関数呼出し）
   await page.evaluate(() => {
@@ -206,7 +201,7 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
     // Check timeout
     const currentTime = getTokyoTime().getTime();
     if (currentTime > maxRetryTime) {
-      log(`${formatDateTime(getTokyoTime())}  リトライタイムアウト（60秒経過）`);
+      log(`リトライタイムアウト（60秒経過）`);
       timeoutReached = true;
       break;
     }
@@ -215,7 +210,7 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
 
       // 「次週」関数を呼び出した後の日時出力
       const current_dt = getTokyoTime();
-      log(`${formatDateTime(current_dt)}  「次週」表示後：${(current_dt.getTime() - start_dt.getTime()) / 1000}秒`);
+      log(`「次週」表示後：${(current_dt.getTime() - start_dt.getTime()) / 1000}秒`);
 
       // ★レッスン日時を選択、lesson_select がクリック可能になるのを待機（タイムアウト短縮）
       const lesson_select = page.locator(lesson_date);
@@ -231,7 +226,7 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
 
       const rgbaColor = rgbToRgba(background_color);
       const current_dt2 = getTokyoTime();
-      log(`${formatDateTime(current_dt2)}  ${attemptCount}回目 レッスン背景色：${rgbaColor}`);
+      log(`${attemptCount}回目 レッスン背景色：${rgbaColor}`);
 
       // Check if lesson is gray (unavailable) - more precise matching
       const isGray = rgbaColor === 'rgba(119, 119, 119, 1)' || 
@@ -241,7 +236,7 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
       if (isGray) {
         // 予約不可の場合、画面リフレッシュして、次週を読み込む
         const current_dt3 = getTokyoTime();
-        log(`${formatDateTime(current_dt3)}  ${attemptCount}回目 レッスン背景色が「灰色」の為、選択できず。お手付きと判定。再読み込みを実行。背景色：${rgbaColor}`);
+        log(`${attemptCount}回目 レッスン背景色が「灰色」の為、選択できず。お手付きと判定。再読み込みを実行。背景色：${rgbaColor}`);
 
         // リロードを最適化（domcontentloadedで高速化）
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
@@ -265,17 +260,14 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
       break;
 
     } catch (error: any) {
-      // エラーの場合、リトライする
-      const current_dt4 = getTokyoTime();
-
       if (error.name === 'TimeoutError' || error.message?.includes('timeout')) {
-        log(`${formatDateTime(current_dt4)}  ${attemptCount}回目：対象レッスンがクリックできず。リトライする`);
+        log(`${attemptCount}回目：対象レッスンがクリックできず。リトライする`);
         // 短い待機後にリトライ（ページが応答するまで）
         await sleep(100);
         continue;
       } else {
         // その他の例外の場合、ページをリフレッシュ
-        log(`${formatDateTime(current_dt4)}  ${attemptCount}回目：対象レッスンがクリックで想定外の例外エラー発生。再読み込み＆リトライする`);
+        log(`${attemptCount}回目：対象レッスンがクリックで想定外の例外エラー発生。再読み込み＆リトライする`);
         log(`エラー詳細: ${error.toString()}`);
 
         // リロードを最適化
@@ -297,17 +289,21 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
   }
 
   if (!lessonSelected) {
+    let msg = "";
     if (timeoutReached) {
-      log("レッスン選択タイムアウト（60秒経過）、プログラムを終了");
+      // log("レッン選択タイムアウト（60秒経過）、プログラムを終了");
+      msg = "レッスン選択タイムアウト（60秒経過）、プログラムを終了";
     } else {
-      log("レッスンの指定でループアウトが発生、プログラムを終了");
+      // log("レッスンの指定でループアウトが発生、プログラムを終了");
+      msg = "レッスンの指定でループアウトが発生、プログラムを終了";
     }
     await browser.close();
-    return; // Early return to prevent execution of code below with closed browser
+    throw new Error(msg);
+    // return; // Early return to prevent execution of code below with closed browser
   }
 
   const current_dt5 = getTokyoTime();
-  log(`${formatDateTime(current_dt5)}  レッスン日押下後：${(current_dt5.getTime() - start_dt.getTime()) / 1000}秒`);
+  log(`レッスン日押下後：${(current_dt5.getTime() - start_dt.getTime()) / 1000}秒`);
 
   // ★レッスン場所を選択（タイムアウト短縮）
   const lesson_position = page.locator(lesson_no);
@@ -315,7 +311,7 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
   await lesson_position.click({ timeout: 10000 });
 
   const current_dt6 = getTokyoTime();
-  log(`${formatDateTime(current_dt6)}  座席ボタン押下後：${(current_dt6.getTime() - start_dt.getTime()) / 1000}秒`);
+  log(`座席ボタン押下後：${(current_dt6.getTime() - start_dt.getTime()) / 1000}秒`);
 
   // 次へをクリック（タイムアウト短縮）
   const next_button2 = page.locator('#confirmsubmit > span');
@@ -332,7 +328,7 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
     await confirmsubmit_button.click({ timeout: 10000 });
 
     // 予約完了の確認を待機（最小限の待機）
-    await sleep(2000);
+    await sleep(5000);
   } else {
     log("confirm_reservation = False のため、予約せず");
   }
@@ -346,41 +342,85 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
 }
 
 // メイン処理
-export default async function run(configData: ConfigData, isProduction: boolean): Promise<number> {
+export default async function run(configData: ConfigData, isProduction: boolean = false, profile: string = "test"): Promise<number> {
+  // プロダクションモードを設定
+  setLogProductionMode(isProduction);
+
+  // プロファイル名を設定
+  setLogProfile(profile);
+
+  // "status" フォルダを作成
+  const statusDir = path.join(baseDir, 'status');
+  if (!fs.existsSync(statusDir)) {
+    fs.mkdirSync(statusDir, { recursive: false });
+  }
+
+  // status/{profile} ファイルを作成
+  const profileStatusFile = path.join(statusDir, profile);
+  if (!fs.existsSync(profileStatusFile)) {
+    fs.writeFileSync(profileStatusFile, '', 'utf-8');
+  }
+
+  // status/{profile} ファイルに実行時間を記録
+  fs.writeFileSync(profileStatusFile, `${getRegularDatetimeString(getTokyoTime())}@Running`, 'utf-8');
+
   // プログラム開始時刻を記録
   const programStartTime: Date = getTokyoTime();
-  log(`${formatDateTime(programStartTime)}  プログラム開始`);
+  log(`プログラム開始 ==================================================`);
+
+  let success = false;
+  let errorMessage = "";
 
   try {
     await work(configData, isProduction);
+    success = true;
   } catch (error: any) {
     log(`エラーが発生しました: ${error.toString()}`);
+    errorMessage = error.toString();
     if (error instanceof Error) {
       log(`エラースタック: ${error.stack}`);
     }
-    return -1;
   }
 
   // 実行時間を記録
   const programEndTime = getTokyoTime();
   const totalExecutionTime = (programEndTime.getTime() - programStartTime.getTime()) / 1000;
-  log(`${formatDateTime(programEndTime)}  プログラム終了`);
-  log(`総実行時間: ${totalExecutionTime.toFixed(3)}秒 (${(totalExecutionTime / 60).toFixed(2)}分)`);
+  const displayTotalExecutionTimeSeconds = totalExecutionTime.toFixed(3);  
+  const displayTotalExecutionTimeMinutes = (totalExecutionTime / 60).toFixed(2);
+  log(`総実行時間: ${displayTotalExecutionTimeSeconds}秒 (${displayTotalExecutionTimeMinutes}分)`);
+  log(`${success ? '成功' : '失敗'}終了`);
+
+  // status/{profile} ファイルを空にする
+  fs.writeFileSync(profileStatusFile, `${getRegularDatetimeString(getTokyoTime())}@${success ? 'Success' : 'Failure#' + errorMessage}#${displayTotalExecutionTimeSeconds}s`, 'utf-8');
 
   // ログバッファをファイルに書き込む
   writeLogBufferToFile();
 
   // 実行時間を返す
-  return totalExecutionTime;
+  return success ? totalExecutionTime : -1;
 }
 
 // メインスレッドの場合のみ実行
 if (isMainThread) {
   // --production フラグのチェック
   const isProduction = process.argv.includes('--production');
+  
+  // --profile と --config 引数の取得
+  let profileName: string | undefined;
+  let configPath: string | undefined;
+  
+  const profileIndex = process.argv.indexOf('--profile');
+  if (profileIndex !== -1 && process.argv[profileIndex + 1]) {
+    profileName = process.argv[profileIndex + 1];
+  }
+  
+  const configIndex = process.argv.indexOf('--config');
+  if (configIndex !== -1 && process.argv[configIndex + 1]) {
+    configPath = process.argv[configIndex + 1];
+  }
 
   // テスト実行
-  test(isProduction)
+  test(isProduction, profileName, configPath)
     .then((totalExecutionTime: number) => {
       if (totalExecutionTime < 0) {
         process.exit(1);
@@ -388,6 +428,7 @@ if (isMainThread) {
     })
     .catch((error: any) => {
       log(`エラーが発生しました: ${error.toString()}`);
+      writeLogBufferToFile();
       process.exit(1);
     });
 }
