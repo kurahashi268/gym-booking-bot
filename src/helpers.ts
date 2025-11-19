@@ -1,10 +1,11 @@
 // 東京タイムゾーン用のヘルパー関数
 export function getTokyoTime(): Date {
     const now = new Date();
-    const tokyoOffset = 9 * 60; // UTC+9 in minutes
-    const localOffset = now.getTimezoneOffset();
-    const tokyoTime = new Date(now.getTime() + (localOffset + tokyoOffset) * 60000);
-    return tokyoTime;
+    // const tokyoOffset = 9 * 60; // UTC+9 in minutes
+    // const localOffset = now.getTimezoneOffset();
+    // const tokyoTime = new Date(now.getTime() + (localOffset + tokyoOffset) * 60000);
+    // return tokyoTime;
+    return now;
 }
 
 export function getRegularDatetimeString(date: Date): string {
