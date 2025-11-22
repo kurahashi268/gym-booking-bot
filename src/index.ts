@@ -206,6 +206,8 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
   const reservationTime = reservation_time_before1second_d;
   await waitUntil(reservationTime);
 
+  const reversionBeginTime = Date.now();
+
   // 待機時間
   log(`待機時間`);
   await sleep(flying_time * 1000);
@@ -384,6 +386,9 @@ async function work(configData: ConfigData, isProduction: boolean): Promise<void
     await confirmsubmit_button.waitFor({ state: 'visible', timeout: 10000 });
     log(`await confirmsubmit_button.click({ timeout: 10000 });`);
     await confirmsubmit_button.click({ timeout: 10000 });
+
+    const reversionDuration = (Date.now() - reversionBeginTime) / 1000;
+    log(`リバーション時間: ${reversionDuration}秒`);
 
     // 予約完了の確認を待機（最小限の待機）
     log(`予約完了の確認を待機（最小限の待機）`);
